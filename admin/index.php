@@ -38,6 +38,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_link'])) {
     }
 }
 
+if (isset($_POST['generate_api_key'])) {
+    $apiKey = bin2hex(random_bytes(32));
+    $stmt = $db->prepare("UPDATE users SET api_key = ? WHERE id = ?");
+    $stmt->execute([$apiKey, $_SESSION['user_id']]);
+    $message = 'New API key generated successfully!';
+}
+
+$stmt = $db->prepare("SELECT api_key FROM users WHERE id = ?");
+$stmt->execute([$_SESSION['user_id']]);
+$currentUser = $stmt->fetch(PDO::FETCH_ASSOC);
+$apiKey = $currentUser['api_key'] ?? null;
+
 $search = $_GET['search'] ?? '';
 $linkQuery = "SELECT l.*, u.email FROM links l LEFT JOIN users u ON l.user_id = u.id";
 if ($search) {
@@ -112,6 +124,58 @@ $users = $db->query("SELECT * FROM users ORDER BY created_at DESC")->fetchAll(PD
                 <?php echo htmlspecialchars($message); ?>
             </div>
         <?php endif; ?>
+        
+        <div class="section">
+            <h2>API Access</h2>
+            <p style="margin-bottom: 15px; color: #666;">Use the API to programmatically create short links for automation.</p>
+            
+            <?php if ($apiKey): ?>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <strong>Your API Key:</strong><br>
+                    <code style="background: white; padding: 8px; display: inline-block; margin: 10px 0; border: 1px solid #ddd; border-radius: 3px; font-size: 14px;"><?php echo htmlspecialchars($apiKey); ?></code>
+                    <p style="font-size: 12px; color: #dc3545; margin-top: 5px;">⚠️ Keep this secret! Anyone with this key can create short links.</p>
+                </div>
+            <?php else: ?>
+                <p style="color: #666; margin-bottom: 15px;">No API key generated yet.</p>
+            <?php endif; ?>
+            
+            <form method="POST" style="margin-bottom: 20px;">
+                <button type="submit" name="generate_api_key" class="btn" onclick="return confirm('This will replace your existing API key. Continue?')">
+                    <?php echo $apiKey ? 'Regenerate API Key' : 'Generate API Key'; ?>
+                </button>
+            </form>
+            
+            <details style="margin-top: 20px;">
+                <summary style="cursor: pointer; font-weight: bold; padding: 10px; background: #f8f9fa; border-radius: 5px;">📖 API Documentation</summary>
+                <div style="padding: 15px; background: #f8f9fa; margin-top: 10px; border-radius: 5px;">
+                    <h3 style="margin-bottom: 10px;">Create Short Link</h3>
+                    <p><strong>Endpoint:</strong> <code>POST /api/create.php</code></p>
+                    <p><strong>Headers:</strong></p>
+                    <pre style="background: white; padding: 10px; border-radius: 3px; overflow-x: auto;">Content-Type: application/json
+X-API-Key: YOUR_API_KEY_HERE</pre>
+                    
+                    <p style="margin-top: 15px;"><strong>Request Body:</strong></p>
+                    <pre style="background: white; padding: 10px; border-radius: 3px; overflow-x: auto;">{
+  "url": "https://example.com/very-long-url",
+  "short_code": "custom" // Optional: custom short code
+}</pre>
+                    
+                    <p style="margin-top: 15px;"><strong>Example (cURL):</strong></p>
+                    <pre style="background: white; padding: 10px; border-radius: 3px; overflow-x: auto; font-size: 12px;">curl -X POST <?php echo $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http'; echo '://' . $_SERVER['HTTP_HOST']; ?>/api/create.php \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -d '{"url":"https://example.com/page"}'</pre>
+                    
+                    <p style="margin-top: 15px;"><strong>Response (Success):</strong></p>
+                    <pre style="background: white; padding: 10px; border-radius: 3px; overflow-x: auto;">{
+  "success": true,
+  "short_code": "abc123",
+  "short_url": "<?php echo $scheme . '://' . $_SERVER['HTTP_HOST']; ?>/abc123",
+  "long_url": "https://example.com/very-long-url"
+}</pre>
+                </div>
+            </details>
+        </div>
         
         <div class="section">
             <h2>Create New Link</h2>
